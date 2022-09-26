@@ -1,0 +1,504 @@
+<?xml version="1.0" encoding="utf-8"?>
+<search>
+  <entry>
+    <title>Vue页面骨架屏注入实践</title>
+    <url>/posts/18903/</url>
+    <content><![CDATA[<p>好久不更新，今天咱们说说移动端下FCP优化以及Vue页面骨架屏注入实践。</p>
+<h1 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h1><p>随着时间推移，前后端开发渐趋分离，这种开发方式大大提高了前后端项目的可维护性与开发效率，这也使得前后端开发者更关注自己的开发工作。</p>
+<span id="more"></span>
+
+<p>但由于在各个不同场景以及公司、客户日益增长的需求，程序猿们也在开发过程中，遇到些问题：比如首屏渲染时间(<code>FCP</code>)因为首屏需要请求更多内容，比原来多了更多HTTP的往返时间(RTT)，这造成了白屏，如果白屏时间过长，<code>用户体验</code>会大打折扣，如果用户网速差，则FCP会更长。</p>
+<p>由此引申出一系列的优化方法，<code>骨架屏</code>也因此被提出。</p>
+<img src="/posts/18903/logo.jpg" class="">
+
+<p>为了优化首屏渲染时间这个指标，减少白屏时间，前端的程序猿们想了很多办法</p>
+<ul>
+<li>加速或减少HTTP请求损耗：使用CDN加载公用库，使用强缓存和协商缓存，使用域名收敛，小图片使用Base64代替，使用Get请求代替Post请求，</li>
+<li>延迟加载：非重要的库、非首屏图片延迟加载，SPA的组件懒加载等；</li>
+<li>减少请求内容的体积：开启服务器Gzip压缩，JS、CSS文件压缩合并，减少cookies大小；</li>
+<li>浏览器渲染原理：优化关键渲染路径，尽可能减少阻塞渲染的JS、CSS；</li>
+<li>优化用户等待体验：白屏使用加载进度条、菊花图、骨架屏代替等；</li>
+</ul>
+<p><code>注</code>：我们可以简单将骨架屏是传统加载进度条和菊花图的升级版。</p>
+<img src="/posts/18903/skeleton2.gif" class="" title="我们可以简单将骨架屏是传统加载进度条和菊花图的升级版">
+
+
+
+<h1 id="举个栗子"><a href="#举个栗子" class="headerlink" title="举个栗子"></a>举个栗子</h1><p> 脸书的骨架屏，在页面完全渲染完成之前，用户会看到一个样式简单，描绘了当前页面的大致框架的骨架屏页面，然后骨架屏中各个占位部分被实际资源完全替换，这个过程中用户会觉得内容正在逐渐加载即将呈现，降低了用户的焦躁情绪，使得加载过程主观上变得流畅。</p>
+<ul>
+<li><strong>效果⬇</strong><img src="/posts/18903/skeleton.gif" class="" title="效果"></li>
+</ul>
+<h1 id="划重点：生成骨架屏的方法"><a href="#划重点：生成骨架屏的方法" class="headerlink" title="划重点：生成骨架屏的方法"></a>划重点：生成骨架屏的方法</h1><ul>
+<li><h2 id="手写HTML、CSS的方式为目标页定制骨架屏"><a href="#手写HTML、CSS的方式为目标页定制骨架屏" class="headerlink" title="手写HTML、CSS的方式为目标页定制骨架屏"></a>手写HTML、CSS的方式为目标页定制骨架屏</h2></li>
+</ul>
+<p> 主要思路就是使用 vue-server-renderer 这个本来用于服务端渲染的插件，用来把我们写的.vue文件处理为HTML，插入到页面模板的挂载点中，完成骨架屏的注入。这种方式不甚文明，如果页面样式改变了，还得改一遍骨架屏，增加了维护成本</p>
+<ul>
+<li><h2 id="使用图片作为骨架屏；-简单暴力"><a href="#使用图片作为骨架屏；-简单暴力" class="headerlink" title="使用图片作为骨架屏； 简单暴力"></a>使用图片作为骨架屏； 简单暴力</h2></li>
+</ul>
+<p> 小米商城的移动端页面采用的就是这个方法，它是使用了一个Base64的图片来作为骨架屏</p>
+<ul>
+<li><h2 id="自动生成并自动插入静态骨架屏"><a href="#自动生成并自动插入静态骨架屏" class="headerlink" title="自动生成并自动插入静态骨架屏"></a>自动生成并自动插入静态骨架屏</h2></li>
+</ul>
+<p> 插件 vue-skeleton-webpack-plugin，它将插入骨架屏的方式由手动改为自动，原理在构建时使用 Vue 预渲染功能，将骨架屏组件的渲染结果 HTML 片段插入 HTML 页面模版的挂载点中，将样式内联到 head 标签中。这个插件可以给单页面的不同路由设置不同的骨架屏，也可以给多页面设置，同时为了开发时调试方便，会将骨架屏作为路由写入router中，可谓是相当体贴了。</p>
+<p> <code>注</code>：博主demo使用的是<code>vue-skeleton-webpack-plugin</code>插件，首先骨架屏的效果。</p>
+<h1 id="demo操作步骤"><a href="#demo操作步骤" class="headerlink" title="demo操作步骤"></a>demo操作步骤</h1><ul>
+<li><p>搭建vue-cli,创建一个vue初始demo（具体搭建vueDemo请百度之）</p>
+</li>
+<li><p>在项目根目录，安装插件</p>
+<p><strong>命令⬇</strong></p>
+<pre>
+    npm install vue-skeleton-webpack-plugin
+</pre>
+</li>
+<li><p>添加骨架屏vue文件<code>Skeleton.vue</code>，入口文件<code>entry-skeleton.js</code>，webpack配置文件<code>webpack.skeleton.conf.js</code></p>
+<p><strong>详情⬇</strong></p>
+</li>
+<li><p>src目录下，创建<code>Skeleton.vue</code>和<code>entry-skeleton.js</code>。</p>
+</li>
+<li><p>build目录下，创建<code>webpack.skeleton.conf.js</code></p>
+</li>
+<li><p>build目录下，修改<code>webpack.prod.conf.js</code>,<code>webpack.dev.conf.js</code></p>
+</li>
+<li><p><strong>项目目录结构⬇</strong></p>
+</li>
+<li><p><strong>为对应文件编写内容⬇</strong><br>   + 创建<code>Skeleton.vue</code>⬇<br>  创建骨架屏模板<br>  <figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">  &lt;!-- index.html --&gt;</span><br><span class="line">  &lt;template&gt;</span><br><span class="line">  &lt;div class=&quot;skeleton-wrapper&quot;&gt;</span><br><span class="line">    &lt;header class=&quot;skeleton-header&quot;&gt;&lt;/header&gt;</span><br><span class="line">    &lt;section class=&quot;skeleton-block&quot;&gt;</span><br><span class="line">      &lt;img src=&quot;data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB2aWV3Qm94PSIwIDAgMTA4MCAyNjEiPjxkZWZzPjxwYXRoIGlkPSJiIiBkPSJNMCAwaDEwODB2MjYwSDB6Ii8+PGZpbHRlciBpZD0iYSIgd2lkdGg9IjIwMCUiIGhlaWdodD0iMjAwJSIgeD0iLTUwJSIgeT0iLTUwJSIgZmlsdGVyVW5pdHM9Im9iamVjdEJvdW5kaW5nQm94Ij48ZmVPZmZzZXQgZHk9Ii0xIiBpbj0iU291cmNlQWxwaGEiIHJlc3VsdD0ic2hhZG93T2Zmc2V0T3V0ZXIxIi8+PGZlQ29sb3JNYXRyaXggaW49InNoYWRvd09mZnNldE91dGVyMSIgdmFsdWVzPSIwIDAgMCAwIDAuOTMzMzMzMzMzIDAgMCAwIDAgMC45MzMzMzMzMzMgMCAwIDAgMCAwLjkzMzMzMzMzMyAwIDAgMCAxIDAiLz48L2ZpbHRlcj48L2RlZnM+PGcgZmlsbD0ibm9uZSIgZmlsbC1ydWxlPSJldmVub2RkIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSgwIDEpIj48dXNlIGZpbGw9IiMwMDAiIGZpbHRlcj0idXJsKCNhKSIgeGxpbms6aHJlZj0iI2IiLz48dXNlIGZpbGw9IiNGRkYiIHhsaW5rOmhyZWY9IiNiIi8+PHBhdGggZmlsbD0iI0Y2RjZGNiIgZD0iTTIzMCA0NGg1MzN2NDZIMjMweiIvPjxyZWN0IHdpZHRoPSIxNzIiIGhlaWdodD0iMTcyIiB4PSIzMCIgeT0iNDQiIGZpbGw9IiNGNkY2RjYiIHJ4PSI0Ii8+PHBhdGggZmlsbD0iI0Y2RjZGNiIgZD0iTTIzMCAxMThoMzY5djMwSDIzMHpNMjMwIDE4MmgzMjN2MzBIMjMwek04MTIgMTE1aDIzOHYzOUg4MTJ6TTgwOCAxODRoMjQydjMwSDgwOHpNOTE3IDQ4aDEzM3YzN0g5MTd6Ii8+PC9nPjwvc3ZnPg==&quot;&gt;</span><br><span class="line">      &lt;img src=&quot;data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB2aWV3Qm94PSIwIDAgMTA4MCAyNjEiPjxkZWZzPjxwYXRoIGlkPSJiIiBkPSJNMCAwaDEwODB2MjYwSDB6Ii8+PGZpbHRlciBpZD0iYSIgd2lkdGg9IjIwMCUiIGhlaWdodD0iMjAwJSIgeD0iLTUwJSIgeT0iLTUwJSIgZmlsdGVyVW5pdHM9Im9iamVjdEJvdW5kaW5nQm94Ij48ZmVPZmZzZXQgZHk9Ii0xIiBpbj0iU291cmNlQWxwaGEiIHJlc3VsdD0ic2hhZG93T2Zmc2V0T3V0ZXIxIi8+PGZlQ29sb3JNYXRyaXggaW49InNoYWRvd09mZnNldE91dGVyMSIgdmFsdWVzPSIwIDAgMCAwIDAuOTMzMzMzMzMzIDAgMCAwIDAgMC45MzMzMzMzMzMgMCAwIDAgMCAwLjkzMzMzMzMzMyAwIDAgMCAxIDAiLz48L2ZpbHRlcj48L2RlZnM+PGcgZmlsbD0ibm9uZSIgZmlsbC1ydWxlPSJldmVub2RkIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSgwIDEpIj48dXNlIGZpbGw9IiMwMDAiIGZpbHRlcj0idXJsKCNhKSIgeGxpbms6aHJlZj0iI2IiLz48dXNlIGZpbGw9IiNGRkYiIHhsaW5rOmhyZWY9IiNiIi8+PHBhdGggZmlsbD0iI0Y2RjZGNiIgZD0iTTIzMCA0NGg1MzN2NDZIMjMweiIvPjxyZWN0IHdpZHRoPSIxNzIiIGhlaWdodD0iMTcyIiB4PSIzMCIgeT0iNDQiIGZpbGw9IiNGNkY2RjYiIHJ4PSI0Ii8+PHBhdGggZmlsbD0iI0Y2RjZGNiIgZD0iTTIzMCAxMThoMzY5djMwSDIzMHpNMjMwIDE4MmgzMjN2MzBIMjMwek04MTIgMTE1aDIzOHYzOUg4MTJ6TTgwOCAxODRoMjQydjMwSDgwOHpNOTE3IDQ4aDEzM3YzN0g5MTd6Ii8+PC9nPjwvc3ZnPg==&quot;&gt;</span><br><span class="line">      &lt;img src=&quot;data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB2aWV3Qm94PSIwIDAgMTA4MCAyNjEiPjxkZWZzPjxwYXRoIGlkPSJiIiBkPSJNMCAwaDEwODB2MjYwSDB6Ii8+PGZpbHRlciBpZD0iYSIgd2lkdGg9IjIwMCUiIGhlaWdodD0iMjAwJSIgeD0iLTUwJSIgeT0iLTUwJSIgZmlsdGVyVW5pdHM9Im9iamVjdEJvdW5kaW5nQm94Ij48ZmVPZmZzZXQgZHk9Ii0xIiBpbj0iU291cmNlQWxwaGEiIHJlc3VsdD0ic2hhZG93T2Zmc2V0T3V0ZXIxIi8+PGZlQ29sb3JNYXRyaXggaW49InNoYWRvd09mZnNldE91dGVyMSIgdmFsdWVzPSIwIDAgMCAwIDAuOTMzMzMzMzMzIDAgMCAwIDAgMC45MzMzMzMzMzMgMCAwIDAgMCAwLjkzMzMzMzMzMyAwIDAgMCAxIDAiLz48L2ZpbHRlcj48L2RlZnM+PGcgZmlsbD0ibm9uZSIgZmlsbC1ydWxlPSJldmVub2RkIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSgwIDEpIj48dXNlIGZpbGw9IiMwMDAiIGZpbHRlcj0idXJsKCNhKSIgeGxpbms6aHJlZj0iI2IiLz48dXNlIGZpbGw9IiNGRkYiIHhsaW5rOmhyZWY9IiNiIi8+PHBhdGggZmlsbD0iI0Y2RjZGNiIgZD0iTTIzMCA0NGg1MzN2NDZIMjMweiIvPjxyZWN0IHdpZHRoPSIxNzIiIGhlaWdodD0iMTcyIiB4PSIzMCIgeT0iNDQiIGZpbGw9IiNGNkY2RjYiIHJ4PSI0Ii8+PHBhdGggZmlsbD0iI0Y2RjZGNiIgZD0iTTIzMCAxMThoMzY5djMwSDIzMHpNMjMwIDE4MmgzMjN2MzBIMjMwek04MTIgMTE1aDIzOHYzOUg4MTJ6TTgwOCAxODRoMjQydjMwSDgwOHpNOTE3IDQ4aDEzM3YzN0g5MTd6Ii8+PC9nPjwvc3ZnPg==&quot;&gt;</span><br><span class="line">      &lt;img src=&quot;data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB2aWV3Qm94PSIwIDAgMTA4MCAyNjEiPjxkZWZzPjxwYXRoIGlkPSJiIiBkPSJNMCAwaDEwODB2MjYwSDB6Ii8+PGZpbHRlciBpZD0iYSIgd2lkdGg9IjIwMCUiIGhlaWdodD0iMjAwJSIgeD0iLTUwJSIgeT0iLTUwJSIgZmlsdGVyVW5pdHM9Im9iamVjdEJvdW5kaW5nQm94Ij48ZmVPZmZzZXQgZHk9Ii0xIiBpbj0iU291cmNlQWxwaGEiIHJlc3VsdD0ic2hhZG93T2Zmc2V0T3V0ZXIxIi8+PGZlQ29sb3JNYXRyaXggaW49InNoYWRvd09mZnNldE91dGVyMSIgdmFsdWVzPSIwIDAgMCAwIDAuOTMzMzMzMzMzIDAgMCAwIDAgMC45MzMzMzMzMzMgMCAwIDAgMCAwLjkzMzMzMzMzMyAwIDAgMCAxIDAiLz48L2ZpbHRlcj48L2RlZnM+PGcgZmlsbD0ibm9uZSIgZmlsbC1ydWxlPSJldmVub2RkIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSgwIDEpIj48dXNlIGZpbGw9IiMwMDAiIGZpbHRlcj0idXJsKCNhKSIgeGxpbms6aHJlZj0iI2IiLz48dXNlIGZpbGw9IiNGRkYiIHhsaW5rOmhyZWY9IiNiIi8+PHBhdGggZmlsbD0iI0Y2RjZGNiIgZD0iTTIzMCA0NGg1MzN2NDZIMjMweiIvPjxyZWN0IHdpZHRoPSIxNzIiIGhlaWdodD0iMTcyIiB4PSIzMCIgeT0iNDQiIGZpbGw9IiNGNkY2RjYiIHJ4PSI0Ii8+PHBhdGggZmlsbD0iI0Y2RjZGNiIgZD0iTTIzMCAxMThoMzY5djMwSDIzMHpNMjMwIDE4MmgzMjN2MzBIMjMwek04MTIgMTE1aDIzOHYzOUg4MTJ6TTgwOCAxODRoMjQydjMwSDgwOHpNOTE3IDQ4aDEzM3YzN0g5MTd6Ii8+PC9nPjwvc3ZnPg==&quot;&gt;</span><br><span class="line">    &lt;/section&gt;</span><br><span class="line">  &lt;/div&gt;</span><br><span class="line">&lt;/template&gt;</span><br><span class="line"> </span><br><span class="line">&lt;script&gt;</span><br><span class="line">  export default &#123;</span><br><span class="line">    name: &#x27;skeleton&#x27;</span><br><span class="line">  &#125;</span><br><span class="line">&lt;/script&gt;</span><br><span class="line"> </span><br><span class="line">&lt;style scoped&gt;</span><br><span class="line">  .skeleton-header &#123;</span><br><span class="line">    height: 40px;</span><br><span class="line">    background: #1976d2;</span><br><span class="line">    padding:0;</span><br><span class="line">    margin: 0;</span><br><span class="line">    margin-top: 314px;</span><br><span class="line">    width: 100%;</span><br><span class="line">    height: 200px;</span><br><span class="line">  &#125;</span><br><span class="line">  .skeleton-block &#123;</span><br><span class="line">    display: flex;</span><br><span class="line">    flex-direction: column;</span><br><span class="line">    padding-top: 8px;</span><br><span class="line">  &#125;</span><br><span class="line"> </span><br><span class="line">&lt;/style&gt;</span><br></pre></td></tr></table></figure><br>   + 创建<code>entry-skeleton.js</code>⬇<br>  首先需要创建一个仅使用骨架屏组件的入口文件：</p>
+</li>
+</ul>
+<p>  	<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">import Vue from &#x27;vue&#x27;</span><br><span class="line">import Skeleton from &#x27;./Skeleton&#x27;</span><br><span class="line">export default new Vue(&#123;</span><br><span class="line">    components: &#123;</span><br><span class="line">        Skeleton</span><br><span class="line">    &#125;,</span><br><span class="line">    template: &#x27;&lt;Skeleton /&gt;&#x27;</span><br><span class="line">&#125;)</span><br></pre></td></tr></table></figure><br>   + 创建<code>webpack.skeleton.conf.js</code>⬇<br>  创建一个用于服务端渲染的 webpack 配置对象，将刚创建的入口文件指定为 entry 依赖入口。</p>
+<p>  	<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">&#x27;use strict&#x27;;</span><br><span class="line"></span><br><span class="line">const path = require(&#x27;path&#x27;)</span><br><span class="line">const merge = require(&#x27;webpack-merge&#x27;)</span><br><span class="line">const baseWebpackConfig = require(&#x27;./webpack.base.conf&#x27;)</span><br><span class="line">const nodeExternals = require(&#x27;webpack-node-externals&#x27;)</span><br><span class="line"></span><br><span class="line">function resolve(dir) &#123;</span><br><span class="line">    return path.join(__dirname, dir)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">module.exports = merge(baseWebpackConfig, &#123;</span><br><span class="line">    target: &#x27;node&#x27;,</span><br><span class="line">    devtool: false,</span><br><span class="line">    entry: &#123;</span><br><span class="line">        app: resolve(&#x27;../src/entry-skeleton.js&#x27;)</span><br><span class="line">    &#125;,</span><br><span class="line">    output: Object.assign(&#123;&#125;, baseWebpackConfig.output, &#123;</span><br><span class="line">        libraryTarget: &#x27;commonjs2&#x27;</span><br><span class="line">    &#125;),</span><br><span class="line">    externals: nodeExternals(&#123;</span><br><span class="line">        whitelist: /\.css$/</span><br><span class="line">    &#125;),</span><br><span class="line">    plugins: []</span><br><span class="line">&#125;)</span><br></pre></td></tr></table></figure><br>   + build目录下</p>
+<p>   修改<code>webpack.prod.conf.js</code>,<code>webpack.dev.conf.js</code>⬇</p>
+<p>    然后我们将这个 webpack 配置对象通过参数传入骨架屏插件中。添加如下代码：</p>
+<p>  <figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">const SkeletonWebpackPlugin = require(&#x27;vue-skeleton-webpack-plugin&#x27;)</span><br><span class="line">		</span><br><span class="line">new SkeletonWebpackPlugin(&#123;</span><br><span class="line">  webpackConfig: require(&#x27;./webpack.skeleton.conf&#x27;),</span><br><span class="line">  quiet: true</span><br><span class="line">&#125;)</span><br></pre></td></tr></table></figure><br>    完整文件：<br>    <code>webpack.dev.conf.js</code>⬇<br>  <figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">&#x27;use strict&#x27;</span><br><span class="line">const utils = require(&#x27;./utils&#x27;)</span><br><span class="line">const webpack = require(&#x27;webpack&#x27;)</span><br><span class="line">const config = require(&#x27;../config&#x27;)</span><br><span class="line">const merge = require(&#x27;webpack-merge&#x27;)</span><br><span class="line">const path = require(&#x27;path&#x27;)</span><br><span class="line">const baseWebpackConfig = require(&#x27;./webpack.base.conf&#x27;)</span><br><span class="line">const CopyWebpackPlugin = require(&#x27;copy-webpack-plugin&#x27;)</span><br><span class="line">const HtmlWebpackPlugin = require(&#x27;html-webpack-plugin&#x27;)</span><br><span class="line">const FriendlyErrorsPlugin = require(&#x27;friendly-errors-webpack-plugin&#x27;)</span><br><span class="line">const portfinder = require(&#x27;portfinder&#x27;)</span><br><span class="line">const SkeletonWebpackPlugin = require(&#x27;vue-skeleton-webpack-plugin&#x27;)</span><br><span class="line">const HOST = process.env.HOST</span><br><span class="line">const PORT = process.env.PORT &amp;&amp; Number(process.env.PORT)</span><br><span class="line"></span><br><span class="line">const devWebpackConfig = merge(baseWebpackConfig, &#123;</span><br><span class="line">    module: &#123;</span><br><span class="line">        rules: utils.styleLoaders(&#123; sourceMap: config.dev.cssSourceMap, usePostCSS: true &#125;)</span><br><span class="line">    &#125;,</span><br><span class="line">    // cheap-module-eval-source-map is faster for development</span><br><span class="line">    devtool: config.dev.devtool,</span><br><span class="line"></span><br><span class="line">    // these devServer options should be customized in /config/index.js</span><br><span class="line">    devServer: &#123;</span><br><span class="line">        clientLogLevel: &#x27;warning&#x27;,</span><br><span class="line">        historyApiFallback: &#123;</span><br><span class="line">            rewrites: [</span><br><span class="line">                &#123; from: /.*/, to: path.posix.join(config.dev.assetsPublicPath, &#x27;index.html&#x27;) &#125;,</span><br><span class="line">            ],</span><br><span class="line">        &#125;,</span><br><span class="line">        hot: true,</span><br><span class="line">        contentBase: false, // since we use CopyWebpackPlugin.</span><br><span class="line">        compress: true,</span><br><span class="line">        host: HOST || config.dev.host,</span><br><span class="line">        port: PORT || config.dev.port,</span><br><span class="line">        open: config.dev.autoOpenBrowser,</span><br><span class="line">        overlay: config.dev.errorOverlay ? &#123; warnings: false, errors: true &#125; : false,</span><br><span class="line">        publicPath: config.dev.assetsPublicPath,</span><br><span class="line">        proxy: config.dev.proxyTable,</span><br><span class="line">        quiet: true, // necessary for FriendlyErrorsPlugin</span><br><span class="line">        watchOptions: &#123;</span><br><span class="line">            poll: config.dev.poll,</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;,</span><br><span class="line">    plugins: [</span><br><span class="line">        new webpack.DefinePlugin(&#123;</span><br><span class="line">            &#x27;process.env&#x27;: require(&#x27;../config/dev.env&#x27;)</span><br><span class="line">        &#125;),</span><br><span class="line">        new webpack.HotModuleReplacementPlugin(),</span><br><span class="line">        new webpack.NamedModulesPlugin(), // HMR shows correct file names in console on update.</span><br><span class="line">        new webpack.NoEmitOnErrorsPlugin(),</span><br><span class="line">        // https://github.com/ampedandwired/html-webpack-plugin</span><br><span class="line">        new HtmlWebpackPlugin(&#123;</span><br><span class="line">            filename: &#x27;index.html&#x27;,</span><br><span class="line">            template: &#x27;index.html&#x27;,</span><br><span class="line">            inject: true</span><br><span class="line">        &#125;),</span><br><span class="line">        // copy custom static assets</span><br><span class="line">        new CopyWebpackPlugin([&#123;</span><br><span class="line">            from: path.resolve(__dirname, &#x27;../static&#x27;),</span><br><span class="line">            to: config.dev.assetsSubDirectory,</span><br><span class="line">            ignore: [&#x27;.*&#x27;]</span><br><span class="line">        &#125;]),</span><br><span class="line">        // inject skeleton content(DOM &amp; CSS) into HTML</span><br><span class="line">        new SkeletonWebpackPlugin(&#123;</span><br><span class="line">            webpackConfig: require(&#x27;./webpack.skeleton.conf&#x27;),</span><br><span class="line">            quiet: true</span><br><span class="line">        &#125;)</span><br><span class="line">    ]</span><br><span class="line">&#125;)</span><br><span class="line"></span><br><span class="line">module.exports = new Promise((resolve, reject) =&gt; &#123;</span><br><span class="line">    portfinder.basePort = process.env.PORT || config.dev.port</span><br><span class="line">    portfinder.getPort((err, port) =&gt; &#123;</span><br><span class="line">        if (err) &#123;</span><br><span class="line">            reject(err)</span><br><span class="line">        &#125; else &#123;</span><br><span class="line">            // publish the new Port, necessary for e2e tests</span><br><span class="line">            process.env.PORT = port</span><br><span class="line">                // add port to devServer config</span><br><span class="line">            devWebpackConfig.devServer.port = port</span><br><span class="line"></span><br><span class="line">            // Add FriendlyErrorsPlugin</span><br><span class="line">            devWebpackConfig.plugins.push(new FriendlyErrorsPlugin(&#123;</span><br><span class="line">                compilationSuccessInfo: &#123;</span><br><span class="line">                    messages: [`Your application is running here: http://$&#123;devWebpackConfig.devServer.host&#125;:$&#123;port&#125;`],</span><br><span class="line">                &#125;,</span><br><span class="line">                onErrors: config.dev.notifyOnErrors ?</span><br><span class="line">                    utils.createNotifierCallback() : undefined</span><br><span class="line">            &#125;))</span><br><span class="line"></span><br><span class="line">            resolve(devWebpackConfig)</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;)</span><br><span class="line">&#125;)</span><br><span class="line">    </span><br></pre></td></tr></table></figure><br>    完整文件：<br>    <code>webpack.prod.conf.js</code>⬇<br>  <figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">&#x27;use strict&#x27;</span><br><span class="line">const path = require(&#x27;path&#x27;)</span><br><span class="line">const utils = require(&#x27;./utils&#x27;)</span><br><span class="line">const webpack = require(&#x27;webpack&#x27;)</span><br><span class="line">const config = require(&#x27;../config&#x27;)</span><br><span class="line">const merge = require(&#x27;webpack-merge&#x27;)</span><br><span class="line">const baseWebpackConfig = require(&#x27;./webpack.base.conf&#x27;)</span><br><span class="line">const CopyWebpackPlugin = require(&#x27;copy-webpack-plugin&#x27;)</span><br><span class="line">const HtmlWebpackPlugin = require(&#x27;html-webpack-plugin&#x27;)</span><br><span class="line">const ExtractTextPlugin = require(&#x27;extract-text-webpack-plugin&#x27;)</span><br><span class="line">const OptimizeCSSPlugin = require(&#x27;optimize-css-assets-webpack-plugin&#x27;)</span><br><span class="line">const UglifyJsPlugin = require(&#x27;uglifyjs-webpack-plugin&#x27;)</span><br><span class="line"></span><br><span class="line">const SkeletonWebpackPlugin = require(&#x27;vue-skeleton-webpack-plugin&#x27;)</span><br><span class="line"></span><br><span class="line">const env = process.env.NODE_ENV === &#x27;testing&#x27; ?</span><br><span class="line">    require(&#x27;../config/test.env&#x27;) :</span><br><span class="line">    require(&#x27;../config/prod.env&#x27;)</span><br><span class="line"></span><br><span class="line">const webpackConfig = merge(baseWebpackConfig, &#123;</span><br><span class="line">    module: &#123;</span><br><span class="line">        rules: utils.styleLoaders(&#123;</span><br><span class="line">            sourceMap: config.build.productionSourceMap,</span><br><span class="line">            extract: true,</span><br><span class="line">            usePostCSS: true</span><br><span class="line">        &#125;)</span><br><span class="line">    &#125;,</span><br><span class="line">    devtool: config.build.productionSourceMap ? config.build.devtool : false,</span><br><span class="line">    output: &#123;</span><br><span class="line">        path: config.build.assetsRoot,</span><br><span class="line">        filename: utils.assetsPath(&#x27;js/[name].[chunkhash].js&#x27;),</span><br><span class="line">        chunkFilename: utils.assetsPath(&#x27;js/[id].[chunkhash].js&#x27;)</span><br><span class="line">    &#125;,</span><br><span class="line">    plugins: [</span><br><span class="line">        // http://vuejs.github.io/vue-loader/en/workflow/production.html</span><br><span class="line">        new webpack.DefinePlugin(&#123;</span><br><span class="line">            &#x27;process.env&#x27;: env</span><br><span class="line">        &#125;),</span><br><span class="line">        new UglifyJsPlugin(&#123;</span><br><span class="line">            uglifyOptions: &#123;</span><br><span class="line">                compress: &#123;</span><br><span class="line">                    warnings: false</span><br><span class="line">                &#125;</span><br><span class="line">            &#125;,</span><br><span class="line">            sourceMap: config.build.productionSourceMap,</span><br><span class="line">            parallel: true</span><br><span class="line">        &#125;),</span><br><span class="line">        // extract css into its own file</span><br><span class="line">        new ExtractTextPlugin(&#123;</span><br><span class="line">            filename: utils.assetsPath(&#x27;css/[name].[contenthash].css&#x27;),</span><br><span class="line">            // Setting the following option to `false` will not extract CSS from codesplit chunks.</span><br><span class="line">            // Their CSS will instead be inserted dynamically with style-loader when the codesplit chunk has been loaded by webpack.</span><br><span class="line">            // It&#x27;s currently set to `true` because we are seeing that sourcemaps are included in the codesplit bundle as well when it&#x27;s `false`, </span><br><span class="line">            // increasing file size: https://github.com/vuejs-templates/webpack/issues/1110</span><br><span class="line">            allChunks: true,</span><br><span class="line">        &#125;),</span><br><span class="line">        // Compress extracted CSS. We are using this plugin so that possible</span><br><span class="line">        // duplicated CSS from different components can be deduped.</span><br><span class="line">        new OptimizeCSSPlugin(&#123;</span><br><span class="line">            cssProcessorOptions: config.build.productionSourceMap ? &#123; safe: true, map: &#123; inline: false &#125; &#125; : &#123; safe: true &#125;</span><br><span class="line">        &#125;),</span><br><span class="line">        // generate dist index.html with correct asset hash for caching.</span><br><span class="line">        // you can customize output by editing /index.html</span><br><span class="line">        // see https://github.com/ampedandwired/html-webpack-plugin</span><br><span class="line">        new HtmlWebpackPlugin(&#123;</span><br><span class="line">            filename: process.env.NODE_ENV === &#x27;testing&#x27; ?</span><br><span class="line">                &#x27;index.html&#x27; : config.build.index,</span><br><span class="line">            template: &#x27;index.html&#x27;,</span><br><span class="line">            inject: true,</span><br><span class="line">            minify: &#123;</span><br><span class="line">                removeComments: true,</span><br><span class="line">                collapseWhitespace: true,</span><br><span class="line">                removeAttributeQuotes: true</span><br><span class="line">                    // more options:</span><br><span class="line">                    // https://github.com/kangax/html-minifier#options-quick-reference</span><br><span class="line">            &#125;,</span><br><span class="line">            // necessary to consistently work with multiple chunks via CommonsChunkPlugin</span><br><span class="line">            chunksSortMode: &#x27;dependency&#x27;</span><br><span class="line">        &#125;),</span><br><span class="line">        // keep module.id stable when vendor modules does not change</span><br><span class="line">        new webpack.HashedModuleIdsPlugin(),</span><br><span class="line">        // enable scope hoisting</span><br><span class="line">        new webpack.optimize.ModuleConcatenationPlugin(),</span><br><span class="line">        // split vendor js into its own file</span><br><span class="line">        new webpack.optimize.CommonsChunkPlugin(&#123;</span><br><span class="line">            name: &#x27;vendor&#x27;,</span><br><span class="line">            minChunks(module) &#123;</span><br><span class="line">                // any required modules inside node_modules are extracted to vendor</span><br><span class="line">                return (</span><br><span class="line">                    module.resource &amp;&amp;</span><br><span class="line">                    /\.js$/.test(module.resource) &amp;&amp;</span><br><span class="line">                    module.resource.indexOf(</span><br><span class="line">                        path.join(__dirname, &#x27;../node_modules&#x27;)</span><br><span class="line">                    ) === 0</span><br><span class="line">                )</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;),</span><br><span class="line">        // extract webpack runtime and module manifest to its own file in order to</span><br><span class="line">        // prevent vendor hash from being updated whenever app bundle is updated</span><br><span class="line">        new webpack.optimize.CommonsChunkPlugin(&#123;</span><br><span class="line">            name: &#x27;manifest&#x27;,</span><br><span class="line">            minChunks: Infinity</span><br><span class="line">        &#125;),</span><br><span class="line">        // This instance extracts shared chunks from code splitted chunks and bundles them</span><br><span class="line">        // in a separate chunk, similar to the vendor chunk</span><br><span class="line">        // see: https://webpack.js.org/plugins/commons-chunk-plugin/#extra-async-commons-chunk</span><br><span class="line">        new webpack.optimize.CommonsChunkPlugin(&#123;</span><br><span class="line">            name: &#x27;app&#x27;,</span><br><span class="line">            async: &#x27;vendor-async&#x27;,</span><br><span class="line">            children: true,</span><br><span class="line">            minChunks: 3</span><br><span class="line">        &#125;),</span><br><span class="line"></span><br><span class="line">        // copy custom static assets</span><br><span class="line">        new CopyWebpackPlugin([&#123;</span><br><span class="line">            from: path.resolve(__dirname, &#x27;../static&#x27;),</span><br><span class="line">            to: config.build.assetsSubDirectory,</span><br><span class="line">            ignore: [&#x27;.*&#x27;]</span><br><span class="line">        &#125;]),</span><br><span class="line">        // inject skeleton content(DOM &amp; CSS) into HTML</span><br><span class="line">        new SkeletonWebpackPlugin(&#123;</span><br><span class="line">            webpackConfig: require(&#x27;./webpack.skeleton.conf&#x27;),</span><br><span class="line">            quiet: true</span><br><span class="line">        &#125;)</span><br><span class="line">    ]</span><br><span class="line">&#125;)</span><br><span class="line"></span><br><span class="line">if (config.build.productionGzip) &#123;</span><br><span class="line">    const CompressionWebpackPlugin = require(&#x27;compression-webpack-plugin&#x27;)</span><br><span class="line"></span><br><span class="line">    webpackConfig.plugins.push(</span><br><span class="line">        new CompressionWebpackPlugin(&#123;</span><br><span class="line">            asset: &#x27;[path].gz[query]&#x27;,</span><br><span class="line">            algorithm: &#x27;gzip&#x27;,</span><br><span class="line">            test: new RegExp(</span><br><span class="line">                &#x27;\\.(&#x27; +</span><br><span class="line">                config.build.productionGzipExtensions.join(&#x27;|&#x27;) +</span><br><span class="line">                &#x27;)$&#x27;</span><br><span class="line">            ),</span><br><span class="line">            threshold: 10240,</span><br><span class="line">            minRatio: 0.8</span><br><span class="line">        &#125;)</span><br><span class="line">    )</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">if (config.build.bundleAnalyzerReport) &#123;</span><br><span class="line">    const BundleAnalyzerPlugin = require(&#x27;webpack-bundle-analyzer&#x27;).BundleAnalyzerPlugin</span><br><span class="line">    webpackConfig.plugins.push(new BundleAnalyzerPlugin())</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">module.exports = webpackConfig</span><br><span class="line">  </span><br></pre></td></tr></table></figure></p>
+<ul>
+<li>根目录下执行<code>npm run dev</code>，chrome浏览器下调试network为<code>slow 3G</code>模式，<strong>效果⬇</strong><img src="/posts/18903/eg.gif" class="" title="效果"></li>
+</ul>
+<!-- 另：
++ demo源码下载，请戳[这里](https://github.com/LukeLiou/skeleton-vueDemo "demo源码下载") -->]]></content>
+      <categories>
+        <category>前端开发</category>
+      </categories>
+      <tags>
+        <tag>vue</tag>
+        <tag>移动端</tag>
+        <tag>骨架屏</tag>
+        <tag>FE Development</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Web前端开发规范</title>
+    <url>/posts/13653/</url>
+    <content><![CDATA[<h3 id="前言："><a href="#前言：" class="headerlink" title="前言："></a>前言：</h3><p>规范的目的是为了编写高质量的代码。一个项目应该永远遵循同一套编码规范，不管有多少人共同参与同一项目，确保每一行代码都像是同一个人编写的。本规范是以web前端开发者为中心视角，包括命名规范、HTML规范、CSS规范、LESS规范、JavaScript规范。<br>对于本规约条目的延伸信息中，“说明”对内容做了适当扩展和解释；“正例”提倡什么样的编码和实现方式；“反例”说明需要提防的雷区，以及错误案例。</p>
+<span id="more"></span>
+<h3 id="一、命名规范"><a href="#一、命名规范" class="headerlink" title="一、命名规范"></a>一、命名规范</h3><h4 id="1-1-1-项目命名"><a href="#1-1-1-项目命名" class="headerlink" title="1.1.1 项目命名"></a>1.1.1 项目命名</h4><p>全部采用小写方式， 以中划线分隔。<br><strong>正例：</strong><code>h5-portal-front</code><br><strong>反例：</strong><code>h5_portal-front / h5PortalFront</code></p>
+<h4 id="1-1-2-目录命名"><a href="#1-1-2-目录命名" class="headerlink" title="1.1.2 目录命名"></a>1.1.2 目录命名</h4><p>全部采用小写方式， 以中划线分隔，有复数结构时，要采用复数命名法， 缩写不用复数<br><strong>正例：</strong><code>scripts / styles / components / images / utils / layouts / demo-styles / demo-scripts / img / doc</code><br><strong>反例：</strong><code>script / style / demo_scripts / demoStyles / imgs / docs</code></p>
+<p>【特殊】VUE 的项目中的文件目录，使用 kebab-case 命名<br><strong>正例：</strong><code>uni-location / head-search / page-loading / authorized / notice-icon</code><br><strong>反例：</strong><code>UniLocation / HeadSearch / PageLoading</code></p>
+<h4 id="1-1-3-JS、CSS、SCSS、HTML、PNG-文件命名"><a href="#1-1-3-JS、CSS、SCSS、HTML、PNG-文件命名" class="headerlink" title="1.1.3 JS、CSS、SCSS、HTML、PNG 文件命名"></a>1.1.3 JS、CSS、SCSS、HTML、PNG 文件命名</h4><p>全部采用小写方式， 以中划线分隔<br><strong>正例：</strong><code>address-price.js / bas-api.js / index.html / icon-store-more.png / signup.css</code><br><strong>反例：</strong><code>addressPrice.js / BaseApi.js / Index.html / icon_store_more.png</code></p>
+<h4 id="1-1-4-命名严谨性"><a href="#1-1-4-命名严谨性" class="headerlink" title="1.1.4 命名严谨性"></a>1.1.4 命名严谨性</h4><p>代码中的命名严禁使用拼音与英文混合的方式，更不允许直接使用中文的方式。 说明：正确的英文拼写和语法可以让阅读者易于理解，避免歧义。注意，即使纯拼音命名方式也要避免采用<br><strong>正例：</strong><code>henan / luoyang / rmb 等国际通用的名称，可视同英文。</code><br><strong>反例：</strong><code>DaZhePromotion [打折] / getPingfenByName() [评分] / int 某变量 = 3</code></p>
+<p>说明：杜绝完全不规范的缩写，避免望文不知义<br><strong>反例：</strong><code>AbstractClass“缩写”命名成 AbsClass；condition“缩写”命名成 condi，此类随意缩写严重降低了代码的可阅读性。</code></p>
+<h3 id="二、HTML规范（Vue-Template-同样适用）"><a href="#二、HTML规范（Vue-Template-同样适用）" class="headerlink" title="二、HTML规范（Vue Template 同样适用）"></a>二、HTML规范（Vue Template 同样适用）</h3><h4 id="1-2-1-HTML-类型"><a href="#1-2-1-HTML-类型" class="headerlink" title="1.2.1 HTML 类型"></a>1.2.1 HTML 类型</h4><p>推荐使用 HTML5 的文档类型申明：<br>（建议使用 text&#x2F;html 格式的 HTML。避免使用 XHTML。XHTML 以及它的属性，比如 application&#x2F;xhtml+xml 在浏览器中的应用支持与优化空间都十分有限）。</p>
+<ul>
+<li>规定字符编码</li>
+<li>IE 兼容模式</li>
+<li>规定字符编码</li>
+<li>doctype 大写</li>
+</ul>
+<p><strong>正例：</strong></p>
+<figure class="highlight html"><table><tr><td class="code"><pre><span class="line"><span class="meta">&lt;!DOCTYPE <span class="keyword">html</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">html</span>&gt;</span></span><br><span class="line">  <span class="tag">&lt;<span class="name">head</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">meta</span> <span class="attr">http-equiv</span>=<span class="string">&quot;X-UA-Compatible&quot;</span> <span class="attr">content</span>=<span class="string">&quot;IE=Edge&quot;</span> /&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">meta</span> <span class="attr">charset</span>=<span class="string">&quot;UTF-8&quot;</span> /&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">title</span>&gt;</span>Page title<span class="tag">&lt;/<span class="name">title</span>&gt;</span></span><br><span class="line">  <span class="tag">&lt;/<span class="name">head</span>&gt;</span></span><br><span class="line">  <span class="tag">&lt;<span class="name">body</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">img</span> <span class="attr">src</span>=<span class="string">&quot;images/company-logo.png&quot;</span> <span class="attr">alt</span>=<span class="string">&quot;Company&quot;</span> /&gt;</span></span><br><span class="line">  <span class="tag">&lt;/<span class="name">body</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">html</span>&gt;</span></span><br></pre></td></tr></table></figure>
+<h4 id="1-2-2-缩进"><a href="#1-2-2-缩进" class="headerlink" title="1.2.2 缩进"></a>1.2.2 缩进</h4><p>缩进使用 2 个空格（一个 tab），嵌套的节点应该缩进。</p>
+<h4 id="1-2-3-模块注释"><a href="#1-2-3-模块注释" class="headerlink" title="1.2.3 模块注释"></a>1.2.3 模块注释</h4><p>一般用于描述模块的名称以及模块开始与结束的位置。<br>注释内容前后各一个空格字符，<!-- S Comment Text --> 表示模块开始，<!-- E Comment Text --> 表示模块结束，模块与模块之间相隔一行。<br><strong>正例：</strong></p>
+<figure class="highlight html"><table><tr><td class="code"><pre><span class="line"><span class="comment">&lt;!-- S Comment Text A --&gt;</span>   </span><br><span class="line"><span class="tag">&lt;<span class="name">div</span> <span class="attr">class</span>=<span class="string">&quot;mod_a&quot;</span>&gt;</span></span><br><span class="line">    ...</span><br><span class="line"><span class="tag">&lt;/<span class="name">div</span>&gt;</span></span><br><span class="line"><span class="comment">&lt;!-- E Comment Text A --&gt;</span></span><br><span class="line">    </span><br><span class="line"><span class="comment">&lt;!-- S Comment Text B --&gt;</span>   </span><br><span class="line"><span class="tag">&lt;<span class="name">div</span> <span class="attr">class</span>=<span class="string">&quot;mod_b&quot;</span>&gt;</span></span><br><span class="line">    ...</span><br><span class="line"><span class="tag">&lt;/<span class="name">div</span>&gt;</span></span><br><span class="line"><span class="comment">&lt;!-- E Comment Text B --&gt;</span></span><br></pre></td></tr></table></figure>
+<p><strong>反例：</strong></p>
+<figure class="highlight html"><table><tr><td class="code"><pre><span class="line"><span class="comment">&lt;!-- S Comment Text A --&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">div</span> <span class="attr">class</span>=<span class="string">&quot;mod_a&quot;</span>&gt;</span></span><br><span class="line">    ...</span><br><span class="line"><span class="tag">&lt;/<span class="name">div</span>&gt;</span></span><br><span class="line"><span class="comment">&lt;!-- E Comment Text A --&gt;</span></span><br><span class="line"><span class="comment">&lt;!-- S Comment Text B --&gt;</span>   </span><br><span class="line"><span class="tag">&lt;<span class="name">div</span> <span class="attr">class</span>=<span class="string">&quot;mod_b&quot;</span>&gt;</span></span><br><span class="line">    ...</span><br><span class="line"><span class="tag">&lt;/<span class="name">div</span>&gt;</span></span><br><span class="line"><span class="comment">&lt;!-- E Comment Text B --&gt;</span></span><br></pre></td></tr></table></figure>
+<h4 id="1-2-4-语义化标签"><a href="#1-2-4-语义化标签" class="headerlink" title="1.2.4 语义化标签"></a>1.2.4 语义化标签</h4><p>HTML5 中新增很多语义化标签，所以优先使用语义化标签，避免一个页面都是 div 或者 p 标签<br><strong>正例：</strong></p>
+<figure class="highlight html"><table><tr><td class="code"><pre><span class="line"><span class="tag">&lt;<span class="name">header</span>&gt;</span><span class="tag">&lt;/<span class="name">header</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">footer</span>&gt;</span><span class="tag">&lt;/<span class="name">footer</span>&gt;</span></span><br></pre></td></tr></table></figure>
+<p><strong>反例：</strong></p>
+<figure class="highlight html"><table><tr><td class="code"><pre><span class="line"><span class="tag">&lt;<span class="name">div</span>&gt;</span></span><br><span class="line">  <span class="tag">&lt;<span class="name">p</span>&gt;</span><span class="tag">&lt;/<span class="name">p</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">div</span>&gt;</span></span><br></pre></td></tr></table></figure>
+<h4 id="1-2-5-引号"><a href="#1-2-5-引号" class="headerlink" title="1.2.5 引号"></a>1.2.5 引号</h4><p>使用双引号(“ “) 而不是单引号(’ ‘) 。</p>
+<h3 id="三、CSS规范"><a href="#三、CSS规范" class="headerlink" title="三、CSS规范"></a>三、CSS规范</h3><h4 id="1-3-1-命名"><a href="#1-3-1-命名" class="headerlink" title="1.3.1 命名"></a>1.3.1 命名</h4><ul>
+<li>类名使用小写字母，以中划线分隔</li>
+<li>id 采用驼峰式命名</li>
+<li>scss 中的变量、函数、混合、placeholder 采用驼峰式命名</li>
+</ul>
+<p>ID 和 class 的名称总是使用可以反应元素目的和用途的名称，或其他通用的名称，代替表象和晦涩难懂的名称<br><strong>正例：</strong></p>
+<figure class="highlight css"><table><tr><td class="code"><pre><span class="line"><span class="selector-class">.fw-800</span> &#123;</span><br><span class="line">  <span class="attribute">font-weight</span>: <span class="number">800</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="selector-class">.red</span> &#123;</span><br><span class="line">  <span class="attribute">color</span>: red;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><strong>反例：</strong></p>
+<figure class="highlight css"><table><tr><td class="code"><pre><span class="line"><span class="selector-class">.heavy</span> &#123;</span><br><span class="line">  <span class="attribute">font-weight</span>: <span class="number">800</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="selector-class">.important</span> &#123;</span><br><span class="line">  <span class="attribute">color</span>: red;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="1-3-2-选择器"><a href="#1-3-2-选择器" class="headerlink" title="1.3.2 选择器"></a>1.3.2 选择器</h4><ol>
+<li>css 选择器中避免使用标签名<br>从结构、表现、行为分离的原则来看，应该尽量避免 css 中出现 HTML 标签，并且在 css 选择器中出现标签名会存在潜在的问题。</li>
+<li>很多前端开发人员写选择器链的时候不使用 直接子选择器（注：直接子选择器和后代选择器的区别）。有时，这可能会导致疼痛的设计问题并且有时候可能会很耗性能。然而，在任何情况下，这是一个非常不好的做法。如果你不写很通用的，需要匹配到 DOM 末端的选择器， 你应该总是考虑直接子选择器。<br><strong>正例：</strong><figure class="highlight css"><table><tr><td class="code"><pre><span class="line"><span class="selector-class">.content</span> <span class="selector-class">.title</span> &#123;</span><br><span class="line">  <span class="attribute">font-size</span>: <span class="number">2rem</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<strong>反例：</strong><figure class="highlight css"><table><tr><td class="code"><pre><span class="line"><span class="selector-class">.content</span> &gt; <span class="selector-class">.title</span> &#123;</span><br><span class="line">  <span class="attribute">font-size</span>: <span class="number">2rem</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></li>
+</ol>
+<h4 id="1-3-3-尽量使用缩写属性"><a href="#1-3-3-尽量使用缩写属性" class="headerlink" title="1.3.3 尽量使用缩写属性"></a>1.3.3 尽量使用缩写属性</h4><p><strong>正例：</strong></p>
+<figure class="highlight css"><table><tr><td class="code"><pre><span class="line"><span class="selector-class">.content</span> &#123;</span><br><span class="line">  <span class="attribute">border-top</span>: <span class="number">0</span>;</span><br><span class="line">  <span class="attribute">font</span>: <span class="number">100%</span>/<span class="number">1.6</span> palatino, georgia, serif;</span><br><span class="line">  <span class="attribute">padding</span>: <span class="number">0</span> <span class="number">1em</span> <span class="number">2em</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><strong>反例：</strong></p>
+<figure class="highlight css"><table><tr><td class="code"><pre><span class="line"><span class="selector-class">.content</span> &#123;</span><br><span class="line">  <span class="attribute">border-top-style</span>: none;</span><br><span class="line">  <span class="attribute">font-family</span>: palatino, georgia, serif;</span><br><span class="line">  <span class="attribute">font-size</span>: <span class="number">100%</span>;</span><br><span class="line">  <span class="attribute">line-height</span>: <span class="number">1.6</span>;</span><br><span class="line">  <span class="attribute">padding-bottom</span>: <span class="number">2em</span>;</span><br><span class="line">  <span class="attribute">padding-left</span>: <span class="number">1em</span>;</span><br><span class="line">  <span class="attribute">padding-right</span>: <span class="number">1em</span>;</span><br><span class="line">  <span class="attribute">padding-top</span>: <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="1-3-4-每个选择器及属性独占一行"><a href="#1-3-4-每个选择器及属性独占一行" class="headerlink" title="1.3.4 每个选择器及属性独占一行"></a>1.3.4 每个选择器及属性独占一行</h4><p><strong>正例：</strong></p>
+<figure class="highlight css"><table><tr><td class="code"><pre><span class="line"><span class="selector-tag">button</span>&#123;</span><br><span class="line">  <span class="attribute">width</span>:<span class="number">100px</span>;</span><br><span class="line">  <span class="attribute">height</span>:<span class="number">50px</span>;</span><br><span class="line">  <span class="attribute">color</span>:<span class="number">#fff</span>;</span><br><span class="line">  <span class="attribute">background</span>:<span class="number">#00a0e9</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><strong>反例：</strong></p>
+<figure class="highlight css"><table><tr><td class="code"><pre><span class="line"><span class="selector-tag">button</span>&#123;</span><br><span class="line">  <span class="attribute">width</span>:<span class="number">100px</span>;<span class="attribute">height</span>:<span class="number">50px</span>;<span class="attribute">color</span>:<span class="number">#fff</span>;<span class="attribute">background</span>:<span class="number">#00a0e9</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="1-3-5-省略0后面的单位"><a href="#1-3-5-省略0后面的单位" class="headerlink" title="1.3.5 省略0后面的单位"></a>1.3.5 省略0后面的单位</h4><p><strong>正例：</strong></p>
+<figure class="highlight css"><table><tr><td class="code"><pre><span class="line"><span class="selector-tag">div</span>&#123;</span><br><span class="line">  <span class="attribute">padding-bottom</span>: <span class="number">0</span>;</span><br><span class="line">  <span class="attribute">margin</span>: <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><strong>反例：</strong></p>
+<figure class="highlight css"><table><tr><td class="code"><pre><span class="line"><span class="selector-tag">div</span>&#123;</span><br><span class="line">  <span class="attribute">padding-bottom</span>: <span class="number">0px</span>;</span><br><span class="line">  <span class="attribute">margin</span>: <span class="number">0em</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="1-3-6-避免使用ID选择器及全局标签选择器防止污染全局样式"><a href="#1-3-6-避免使用ID选择器及全局标签选择器防止污染全局样式" class="headerlink" title="1.3.6 避免使用ID选择器及全局标签选择器防止污染全局样式"></a>1.3.6 避免使用ID选择器及全局标签选择器防止污染全局样式</h4><p><strong>正例：</strong></p>
+<figure class="highlight css"><table><tr><td class="code"><pre><span class="line"><span class="selector-class">.header</span>&#123;</span><br><span class="line">  <span class="attribute">padding-bottom</span>: <span class="number">0px</span>;</span><br><span class="line">  <span class="attribute">margin</span>: <span class="number">0em</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><strong>反例：</strong></p>
+<figure class="highlight css"><table><tr><td class="code"><pre><span class="line"><span class="selector-id">#header</span>&#123;</span><br><span class="line">  <span class="attribute">padding-bottom</span>: <span class="number">0px</span>;</span><br><span class="line">  <span class="attribute">margin</span>: <span class="number">0em</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="1-3-7-边框css使用px"><a href="#1-3-7-边框css使用px" class="headerlink" title="1.3.7 边框css使用px"></a>1.3.7 边框css使用px</h4><p><strong>正例：</strong></p>
+<figure class="highlight css"><table><tr><td class="code"><pre><span class="line"><span class="selector-tag">div</span>&#123;</span><br><span class="line">  <span class="attribute">border</span>: <span class="number">1px</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><strong>反例：</strong></p>
+<figure class="highlight css"><table><tr><td class="code"><pre><span class="line"><span class="selector-tag">div</span>&#123;</span><br><span class="line">  <span class="attribute">border</span>: <span class="number">1</span>rpx;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="selector-tag">div</span>&#123;</span><br><span class="line">  <span class="attribute">border</span>: <span class="number">1rem</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="四、LESS规范"><a href="#四、LESS规范" class="headerlink" title="四、LESS规范"></a>四、LESS规范</h3><h4 id="1-4-1-代码组织"><a href="#1-4-1-代码组织" class="headerlink" title="1.4.1 代码组织"></a>1.4.1 代码组织</h4><p>1)将公共less文件放置在style&#x2F;less&#x2F;common文件夹<br>例:&#x2F;&#x2F; color.less,common.less<br>2)按以下顺序组织<br>1、@import;<br>2、变量声明;<br>3、样式声明;</p>
+<figure class="highlight javascript"><table><tr><td class="code"><pre><span class="line">@<span class="keyword">import</span> <span class="string">&quot;mixins/size.less&quot;</span>;</span><br><span class="line"></span><br><span class="line">@<span class="keyword">default</span>-text-<span class="attr">color</span>: #<span class="number">333</span>;</span><br><span class="line"></span><br><span class="line">.<span class="property">page</span> &#123;</span><br><span class="line">  <span class="attr">width</span>: 960px;</span><br><span class="line">  <span class="attr">margin</span>: <span class="number">0</span> auto;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="1-4-2-避免嵌套层级过多"><a href="#1-4-2-避免嵌套层级过多" class="headerlink" title="1.4.2 避免嵌套层级过多"></a>1.4.2 避免嵌套层级过多</h4><p>将嵌套深度限制在3级。对于超过4级的嵌套，给予重新评估。这可以避免出现过于详实的CSS选择器。<br>避免大量的嵌套规则。当可读性受到影响时，将之打断。推荐避免出现多于20行的嵌套规则出现</p>
+<h4 id=""><a href="#" class="headerlink" title=""></a></h4><p><strong>正例：</strong></p>
+<figure class="highlight css"><table><tr><td class="code"><pre><span class="line"><span class="selector-class">.main-title</span>&#123;</span><br><span class="line">   <span class="selector-class">.name</span>&#123;</span><br><span class="line">      <span class="attribute">color</span>:<span class="number">#fff</span></span><br><span class="line">   &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><strong>反例：</strong></p>
+<figure class="highlight css"><table><tr><td class="code"><pre><span class="line"><span class="selector-class">.main</span>&#123;</span><br><span class="line">  <span class="selector-class">.title</span>&#123;</span><br><span class="line">    <span class="selector-class">.name</span>&#123;</span><br><span class="line">       <span class="attribute">color</span>:<span class="number">#fff</span></span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="五、SCSS规范"><a href="#五、SCSS规范" class="headerlink" title="五、SCSS规范"></a>五、SCSS规范</h3><h4 id="1-5-1-格式与编码"><a href="#1-5-1-格式与编码" class="headerlink" title="1.5.1 格式与编码"></a>1.5.1 格式与编码</h4><h5 id="1-统一字符编码"><a href="#1-统一字符编码" class="headerlink" title="1) 统一字符编码"></a>1) 统一字符编码</h5><p><strong>正例：</strong><code>charset &#39;utf-8&#39;</code></p>
+<h5 id="2-统一代码格式"><a href="#2-统一代码格式" class="headerlink" title="2) 统一代码格式"></a>2) 统一代码格式</h5><ul>
+<li>使用 2 个空格进行缩进</li>
+<li>代码需要断行,且必须带上分号;</li>
+</ul>
+<p><strong>正例：</strong></p>
+<figure class="highlight css"><table><tr><td class="code"><pre><span class="line"><span class="selector-class">.test</span> &#123;</span><br><span class="line">    property1: attr;</span><br><span class="line">    property2: attr;</span><br><span class="line">    property3: attr;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="1-5-2-使用转义字符"><a href="#1-5-2-使用转义字符" class="headerlink" title="1.5.2 使用转义字符"></a>1.5.2 使用转义字符</h4><p>字符串和超链接使用单引号包裹,内部出现其他冲突符号建议使用转义字符</p>
+<h4 id="1-5-3-数字为0的不建议带单位"><a href="#1-5-3-数字为0的不建议带单位" class="headerlink" title="1.5.3 数字为0的不建议带单位"></a>1.5.3 数字为0的不建议带单位</h4><h4 id="1-5-4-颜色：十六进制与RGBA"><a href="#1-5-4-颜色：十六进制与RGBA" class="headerlink" title="1.5.4 颜色：十六进制与RGBA"></a>1.5.4 颜色：十六进制与RGBA</h4><p>颜色上,十六进制的颜色推荐#fff(小写且尽可能的缩写),RGBA(0,0,0,.5)[逗号之间不带空格]</p>
+<h4 id="1-5-5-变量：复用变量"><a href="#1-5-5-变量：复用变量" class="headerlink" title="1.5.5 变量：复用变量"></a>1.5.5 变量：复用变量</h4><p>变量上,有可能复用的引用,应该赋值给变量;对于偶尔使用的,推荐使用%placeholder占位符变量;</p>
+<h4 id="1-5-6-嵌套"><a href="#1-5-6-嵌套" class="headerlink" title="1.5.6 嵌套"></a>1.5.6 嵌套</h4><ul>
+<li><p>嵌套中,不仅仅考虑使用CSS的写法,跟应该使用新属性&amp;来减少变量名的书写,方便阅读和引用正确<br><strong>正例：</strong></p>
+<figure class="highlight css"><table><tr><td class="code"><pre><span class="line"><span class="selector-tag">a</span>&#123;</span><br><span class="line">  &amp;<span class="selector-pseudo">:link</span>,</span><br><span class="line">  &amp;<span class="selector-pseudo">:visited</span>&#123;</span><br><span class="line">    <span class="attribute">color</span>:<span class="number">#000</span>;</span><br><span class="line">  &#125;</span><br><span class="line">  &amp;<span class="selector-pseudo">:hover</span>&#123;</span><br><span class="line">    <span class="attribute">color</span>:<span class="number">#000</span>;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>嵌套中,属性根据类型进行排序（position, display, colors, font, miscellaneous…）,类型之间隔行<br><strong>正例：</strong></p>
+<figure class="highlight css"><table><tr><td class="code"><pre><span class="line"><span class="selector-class">.container</span>&#123;</span><br><span class="line">  <span class="comment">/*定位*/</span></span><br><span class="line">  <span class="attribute">position</span>:absolute;</span><br><span class="line">  <span class="attribute">left</span>:<span class="number">50%</span>;</span><br><span class="line">  <span class="attribute">top</span>:<span class="number">50%</span>;</span><br><span class="line">  <span class="attribute">transform</span>:<span class="built_in">translate</span>(-<span class="number">50%</span>,-<span class="number">50%</span>);</span><br><span class="line"> </span><br><span class="line">  <span class="comment">/*盒子类型*/</span></span><br><span class="line">  <span class="attribute">display</span>:block;</span><br><span class="line"></span><br><span class="line">  <span class="comment">/*颜色控制*/</span></span><br><span class="line">  <span class="attribute">color</span>:<span class="number">#000</span>;</span><br><span class="line">  <span class="attribute">background-color</span>:<span class="number">#f00</span>;</span><br><span class="line">  <span class="attribute">border-color</span>:<span class="number">#ff0</span>;</span><br><span class="line"></span><br><span class="line">  <span class="comment">/*字体设置*/</span></span><br><span class="line">  <span class="attribute">font-family</span>:<span class="string">&quot;微软雅黑&quot;</span>;</span><br><span class="line">  <span class="attribute">font-size</span>:<span class="number">15px</span>;</span><br><span class="line">  <span class="attribute">font-weight</span>:<span class="number">700</span>;</span><br><span class="line">  <span class="attribute">line-height</span>:<span class="number">30px</span>;</span><br><span class="line">  <span class="attribute">text-decoration</span>:none;</span><br><span class="line">  work-break:break-all;</span><br><span class="line"></span><br><span class="line">  <span class="comment">/*阴影设置*/</span></span><br><span class="line">  <span class="attribute">text-shadow</span>: <span class="number">1px</span> <span class="number">1px</span> <span class="number">1px</span> <span class="built_in">rgba</span>(<span class="number">0</span>,<span class="number">0</span>,<span class="number">0</span>,.<span class="number">5</span>);</span><br><span class="line">  <span class="attribute">box-shadow</span>: <span class="number">1px</span> <span class="number">1px</span> <span class="number">1px</span> <span class="built_in">rgba</span>(<span class="number">0</span>,<span class="number">0</span>,<span class="number">0</span>,.<span class="number">5</span>); </span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure></li>
+</ul>
+<h4 id="1-5-7-命名规范"><a href="#1-5-7-命名规范" class="headerlink" title="1.5.7 命名规范"></a>1.5.7 命名规范</h4><p>推荐和CSS统一,小写加小横杆wrapper-inbox</p>
+<h4 id="1-5-8-注释"><a href="#1-5-8-注释" class="headerlink" title="1.5.8 注释"></a>1.5.8 注释</h4><ul>
+<li>推荐和JS一样,有函数,写明类型,结果。</li>
+<li>通用样式必须注明作用。<br><strong>正例：</strong><figure class="highlight css"><table><tr><td class="code"><pre><span class="line"><span class="selector-class">.overlay</span> &#123;</span><br><span class="line">  // modals are <span class="number">6000</span>, saving messages are <span class="number">5500</span>, <span class="selector-tag">header</span> is <span class="number">2000</span></span><br><span class="line">  <span class="attribute">z-index</span>: <span class="number">5000</span>; </span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></li>
+</ul>
+<h4 id="1-5-9-目录层次"><a href="#1-5-9-目录层次" class="headerlink" title="1.5.9 目录层次"></a>1.5.9 目录层次</h4><p>相同文件夹的import不换行,不同文件夹的导入要换行(建议参考bootstrap的sass写法)。</p>
+<h4 id="1-5-10-混合宏-mixin"><a href="#1-5-10-混合宏-mixin" class="headerlink" title="1.5.10 混合宏(mixin)"></a>1.5.10 混合宏(mixin)</h4><p>混合宏(mixin),在传入CSS3阴影这类多参数的值时,应该使用$var…<br><strong>正例：</strong></p>
+<figure class="highlight css"><table><tr><td class="code"><pre><span class="line"><span class="keyword">@mixin</span> shadows($shadows...) &#123;</span><br><span class="line"></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="1-5-11-循环条件判断"><a href="#1-5-11-循环条件判断" class="headerlink" title="1.5.11 循环条件判断"></a>1.5.11 循环条件判断</h4><p>循环条件判断可以参考JS的规范写法。</p>
+<h4 id="1-5-12-extend与-include"><a href="#1-5-12-extend与-include" class="headerlink" title="1.5.12 @extend与@include"></a>1.5.12 @extend与@include</h4><p>@extend在前,@include其次,常规样式在后,伪类在最后<br><strong>正例：</strong></p>
+<figure class="highlight css"><table><tr><td class="code"><pre><span class="line"><span class="selector-class">.test</span> &#123;</span><br><span class="line">  <span class="keyword">@extend</span> %module; </span><br><span class="line">  <span class="keyword">@include</span> transition(all <span class="number">0.3s</span> ease-out);</span><br><span class="line">  <span class="attribute">background</span>: <span class="number">#000</span>;</span><br><span class="line">  &amp;<span class="selector-pseudo">:hover</span> &#123;</span><br><span class="line">    <span class="attribute">background</span>: DarkCyan;</span><br><span class="line">  &#125;</span><br><span class="line">  &amp;<span class="selector-pseudo">::before</span> &#123;</span><br><span class="line">    <span class="attribute">content</span>: <span class="string">&quot;&quot;</span>;</span><br><span class="line">    <span class="attribute">display</span>: block;</span><br><span class="line">  &#125;</span><br><span class="line">  ...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="1-5-13-模块化"><a href="#1-5-13-模块化" class="headerlink" title="1.5.13 模块化"></a>1.5.13 模块化</h4><p>建议使用模块化写法,每个组件单独写个scss文件,通过@import来汇总成一个主scss文件,这样非常有利于维护。</p>
+<h3 id="六、JavaScript规范"><a href="#六、JavaScript规范" class="headerlink" title="六、JavaScript规范"></a>六、JavaScript规范</h3><h4 id="1-6-1-命名"><a href="#1-6-1-命名" class="headerlink" title="1.6.1 命名"></a>1.6.1 命名</h4><h5 id="1-采用小写驼峰命名-lowerCamelCase，代码中的命名均不能以下划线，也不能以下划线或美元符号结束"><a href="#1-采用小写驼峰命名-lowerCamelCase，代码中的命名均不能以下划线，也不能以下划线或美元符号结束" class="headerlink" title="1) 采用小写驼峰命名 lowerCamelCase，代码中的命名均不能以下划线，也不能以下划线或美元符号结束"></a>1) 采用小写驼峰命名 lowerCamelCase，代码中的命名均不能以下划线，也不能以下划线或美元符号结束</h5><p><strong>反例：</strong><code>_name / name_ / name$</code></p>
+<h5 id="2-方法名、参数名、成员变量、局部变量都统一使用-lowerCamelCase-风格，必须遵从驼峰形式。"><a href="#2-方法名、参数名、成员变量、局部变量都统一使用-lowerCamelCase-风格，必须遵从驼峰形式。" class="headerlink" title="2) 方法名、参数名、成员变量、局部变量都统一使用 lowerCamelCase 风格，必须遵从驼峰形式。"></a>2) 方法名、参数名、成员变量、局部变量都统一使用 lowerCamelCase 风格，必须遵从驼峰形式。</h5><p><strong>正例：</strong><code>localValue / getHttpMessage() / inputUserId</code></p>
+<p>说明：<strong>其中 method 方法命名必须是 动词 或者 动词+名词 形式</strong><br><strong>正例：</strong><code>saveShopCarData /openShopCarInfoDialog</code><br><strong>反例：</strong><code>save / open / show / go</code></p>
+<p>说明：<strong>增删查改，详情统一使用如下 5 个单词，不得使用其他（目的是为了统一各个端）</strong><br><code>add / update / delete / detail / get</code><br>附： 函数方法常用的动词:</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">get 获取/set 设置,</span><br><span class="line">add 增加/remove 删除</span><br><span class="line">create 创建/destory 移除</span><br><span class="line">start 启动/stop 停止</span><br><span class="line">open 打开/close 关闭,</span><br><span class="line">read 读取/write 写入</span><br><span class="line">load 载入/save 保存,</span><br><span class="line">create 创建/destroy 销毁</span><br><span class="line">begin 开始/end 结束,</span><br><span class="line">backup 备份/restore 恢复</span><br><span class="line">import 导入/export 导出,</span><br><span class="line">split 分割/merge 合并</span><br><span class="line">inject 注入/extract 提取,</span><br><span class="line">attach 附着/detach 脱离</span><br><span class="line">bind 绑定/separate 分离,</span><br><span class="line">view 查看/browse 浏览</span><br><span class="line">edit 编辑/modify 修改,</span><br><span class="line">select 选取/mark 标记</span><br><span class="line">copy 复制/paste 粘贴,</span><br><span class="line">undo 撤销/redo 重做</span><br><span class="line">insert 插入/delete 移除,</span><br><span class="line">add 加入/append 添加</span><br><span class="line">clean 清理/clear 清除,</span><br><span class="line">index 索引/sort 排序</span><br><span class="line">find 查找/search 搜索,</span><br><span class="line">increase 增加/decrease 减少</span><br><span class="line">play 播放/pause 暂停,</span><br><span class="line">launch 启动/run 运行</span><br><span class="line">compile 编译/execute 执行,</span><br><span class="line">debug 调试/trace 跟踪</span><br><span class="line">observe 观察/listen 监听,</span><br><span class="line">build 构建/publish 发布</span><br><span class="line">input 输入/output 输出,</span><br><span class="line">encode 编码/decode 解码</span><br><span class="line">encrypt 加密/decrypt 解密,</span><br><span class="line">compress 压缩/decompress 解压缩</span><br><span class="line">pack 打包/unpack 解包,</span><br><span class="line">parse 解析/emit 生成</span><br><span class="line">connect 连接/disconnect 断开,</span><br><span class="line">send 发送/receive 接收</span><br><span class="line">download 下载/upload 上传,</span><br><span class="line">refresh 刷新/synchronize 同步</span><br><span class="line">update 更新/revert 复原,</span><br><span class="line">lock 锁定/unlock 解锁</span><br><span class="line">check out 签出/check in 签入,</span><br><span class="line">submit 提交/commit 交付</span><br><span class="line">push 推/pull 拉,</span><br><span class="line">expand 展开/collapse 折叠</span><br><span class="line">begin 起始/end 结束,</span><br><span class="line">start 开始/finish 完成</span><br><span class="line">enter 进入/exit 退出,</span><br><span class="line">abort 放弃/quit 离开</span><br><span class="line">obsolete 废弃/depreciate 废旧,</span><br><span class="line">collect 收集/aggregate 聚集</span><br></pre></td></tr></table></figure>
+<h5 id="3-常量命名全部大写，单词间用下划线隔开，力求语义表达完整清楚，不要嫌名字长。"><a href="#3-常量命名全部大写，单词间用下划线隔开，力求语义表达完整清楚，不要嫌名字长。" class="headerlink" title="3) 常量命名全部大写，单词间用下划线隔开，力求语义表达完整清楚，不要嫌名字长。"></a>3) 常量命名全部大写，单词间用下划线隔开，力求语义表达完整清楚，不要嫌名字长。</h5><p><strong>正例：</strong><code>MAX_STOCK_COUNT</code><br><strong>反例：</strong><code>MAX_COUNT</code></p>
+<h4 id="1-6-2-代码格式"><a href="#1-6-2-代码格式" class="headerlink" title="1.6.2 代码格式"></a>1.6.2 代码格式</h4><h5 id="1-使用-2-个空格进行缩进"><a href="#1-使用-2-个空格进行缩进" class="headerlink" title="1) 使用 2 个空格进行缩进"></a>1) 使用 2 个空格进行缩进</h5><p><strong>正例：</strong></p>
+<figure class="highlight javascript"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (x &lt; y) &#123;</span><br><span class="line">  x += <span class="number">10</span>;</span><br><span class="line">&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">  x += <span class="number">1</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h5 id="2-不同逻辑、不同语义、不同业务的代码之间插入一个空行分隔开来以提升可读性。"><a href="#2-不同逻辑、不同语义、不同业务的代码之间插入一个空行分隔开来以提升可读性。" class="headerlink" title="2) 不同逻辑、不同语义、不同业务的代码之间插入一个空行分隔开来以提升可读性。"></a>2) 不同逻辑、不同语义、不同业务的代码之间插入一个空行分隔开来以提升可读性。</h5><p>说明：任何情形，没有必要插入多个空行进行隔开。</p>
+<h4 id="1-6-3-字符串"><a href="#1-6-3-字符串" class="headerlink" title="1.6.3 字符串"></a>1.6.3 字符串</h4><p>统一使用单引号(‘)，不使用双引号(“)。这在创建 HTML 字符串非常有好处：<br><strong>正例：</strong></p>
+<figure class="highlight javascript"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> str = <span class="string">&#x27;foo&#x27;</span>;</span><br><span class="line"><span class="keyword">let</span> testDiv = <span class="string">&#x27;&lt;div id=&quot;test&quot;&gt;&lt;/div&gt;&#x27;</span>;</span><br></pre></td></tr></table></figure>
+<p><strong>反例：</strong></p>
+<figure class="highlight javascript"><table><tr><td class="code"><pre><span class="line"><span class="keyword">let</span> str = <span class="string">&#x27;foo&#x27;</span>;</span><br><span class="line"><span class="keyword">let</span> testDiv = <span class="string">&quot;&lt;div id=&#x27;test&#x27;&gt;&lt;/div&gt;&quot;</span>;</span><br></pre></td></tr></table></figure>
+<h4 id="1-6-4-对象声明"><a href="#1-6-4-对象声明" class="headerlink" title="1.6.4 对象声明"></a>1.6.4 对象声明</h4><h5 id="1-使用字面值创建对象"><a href="#1-使用字面值创建对象" class="headerlink" title="1)使用字面值创建对象"></a>1)使用字面值创建对象</h5><p><strong>正例：</strong><code>let user = &#123;&#125;;</code><br><strong>反例：</strong><code>let user = new Object();</code></p>
+<h5 id="2-使用字面量来代替对象构造器"><a href="#2-使用字面量来代替对象构造器" class="headerlink" title="2) 使用字面量来代替对象构造器"></a>2) 使用字面量来代替对象构造器</h5><p><strong>正例：</strong></p>
+<figure class="highlight javascript"><table><tr><td class="code"><pre><span class="line"><span class="keyword">var</span> user = &#123;</span><br><span class="line">  <span class="attr">age</span>: <span class="number">0</span>,</span><br><span class="line">  <span class="attr">name</span>: <span class="number">1</span>,</span><br><span class="line">  <span class="attr">city</span>: <span class="number">3</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p><strong>反例：</strong></p>
+<figure class="highlight javascript"><table><tr><td class="code"><pre><span class="line"><span class="keyword">var</span> user = <span class="keyword">new</span> <span class="title class_">Object</span>();</span><br><span class="line">user.<span class="property">age</span> = <span class="number">0</span>;</span><br><span class="line">user.<span class="property">name</span> = <span class="number">0</span>;</span><br><span class="line">user.<span class="property">city</span> = <span class="number">0</span>;</span><br></pre></td></tr></table></figure>
+<h4 id="1-6-5-使用-ES6-7"><a href="#1-6-5-使用-ES6-7" class="headerlink" title="1.6.5 使用 ES6,7"></a>1.6.5 使用 ES6,7</h4><p>必须优先使用 ES6,7 中新增的语法糖和函数。这将简化你的程序，并让你的代码更加灵活和可复用。<br>说明：必须强制使用 ES6, ES7 的新语法，比如箭头函数、await&#x2F;async ， 解构， let ，const， for…of 等等。</p>
+<h4 id="1-6-6-括号"><a href="#1-6-6-括号" class="headerlink" title="1.6.6 括号"></a>1.6.6 括号</h4><p>下列关键字后必须有大括号（即使代码块的内容只有一行）：if, else, for, while, do, switch, try, catch, finally, with。<br><strong>正例：</strong></p>
+<figure class="highlight javascript"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (condition) &#123;</span><br><span class="line">  <span class="title function_">doSomething</span>();</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><strong>反例：</strong></p>
+<figure class="highlight javascript"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (condition) <span class="title function_">doSomething</span>();</span><br></pre></td></tr></table></figure>
+<h4 id="1-6-7-undefined-判断"><a href="#1-6-7-undefined-判断" class="headerlink" title="1.6.7 undefined 判断"></a>1.6.7 undefined 判断</h4><p>永远不要直接使用 undefined 进行变量判断；使用 typeof 和字符串’undefined’对变量进行判断。<br><strong>正例：</strong></p>
+<figure class="highlight javascript"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (<span class="keyword">typeof</span> person === <span class="string">&#x27;undefined&#x27;</span>) &#123;</span><br><span class="line">    ...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><strong>反例：</strong></p>
+<figure class="highlight javascript"><table><tr><td class="code"><pre><span class="line"><span class="keyword">if</span> (person === <span class="literal">undefined</span>) &#123;</span><br><span class="line">    ...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>说明：<br><code>typeof person === &#39;undefined&#39;</code> 真正的好处在于这里的 person 是可以未定义的。 如果使用<code>if (person === undefined) &#123;...&#125;</code>会抛出<code>Uncaught ReferenceError: person is not defined</code>但是 typeof 一个不存在的变量是不会抛错的。<br>另Vue &#x2F; Vite 作者<a href="https://www.zhihu.com/people/evanyou">尤雨溪</a>也曾在知乎帖子<a href="https://www.zhihu.com/question/31457144/answer/52017094">https://www.zhihu.com/question/31457144/answer/52017094</a>探讨过此用法。</p>
+<h4 id="1-6-8-条件判断和循环最多三层"><a href="#1-6-8-条件判断和循环最多三层" class="headerlink" title="1.6.8 条件判断和循环最多三层"></a>1.6.8 条件判断和循环最多三层</h4><p>条件判断能使用三目运算符和逻辑运算符解决的，就不要使用条件判断，但是谨记不要写太长的三目运算符。如果超过 3 层请抽成函数，并写清楚注释。</p>
+<h4 id="1-6-9-this-的转换命名"><a href="#1-6-9-this-的转换命名" class="headerlink" title="1.6.9 this 的转换命名"></a>1.6.9 this 的转换命名</h4><p>对上下文 this 的引用只能使用’self’来命名。</p>
+<h4 id="1-6-10-慎用-console-log"><a href="#1-6-10-慎用-console-log" class="headerlink" title="1.6.10 慎用 console.log"></a>1.6.10 慎用 console.log</h4><p>因 console.log 大量使用会有性能问题，所以在非 webpack 项目中谨慎使用 log 功能。</p>
+<h4 id="1-6-11没有死代码"><a href="#1-6-11没有死代码" class="headerlink" title="1.6.11没有死代码"></a>1.6.11没有死代码</h4><p>不要留下旧代码注释，以防以后有用。只保留你现在需要的代码，版本控制&#x2F;你的笔记应用就是为此而设的</p>
+<h4 id="1-6-12-内联注释"><a href="#1-6-12-内联注释" class="headerlink" title="1.6.12 内联注释"></a>1.6.12 <strong>内联注释</strong></h4><figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">/*</span><br><span class="line"> *</span><br><span class="line"> */</span><br></pre></td></tr></table></figure>
+<p>在代码中使用内联注释。 仅将块注释用于文档。</p>
+<h4 id="1-6-13-特殊字符"><a href="#1-6-13-特殊字符" class="headerlink" title="1.6.13 特殊字符"></a>1.6.13 特殊字符</h4><h5 id="1-空白字符"><a href="#1-空白字符" class="headerlink" title="1)空白字符"></a>1)空白字符</h5><p>除了行终止符序列之外，ASCII 水平空格字符 (0x20) 是唯一出现在源文件中任何位置的空白字符。这意味着<br>字符串文字中的所有其他空白字符都被转义，并且<br>制表符不用于缩进。</p>
+<h5 id="2-特殊转义序列"><a href="#2-特殊转义序列" class="headerlink" title="2)特殊转义序列"></a>2)特殊转义序列</h5><p>对于任何具有特殊转义序列（&#39;, &quot;, \, \b, \f, \n, \r, \t, \v）的字符，使用该序列而不是相应的数字转义（例如\x0a,\u000a或\u{a}）。从不使用传统的八进制转义符。</p>
+<h5 id="3-非-ASCII-字符"><a href="#3-非-ASCII-字符" class="headerlink" title="3)非 ASCII 字符"></a>3)非 ASCII 字符</h5><p>对于剩余的非 ASCII 字符，要么使用实际的 Unicode 字符（例如∞），要么使用等效的十六进制或 Unicode 转义符（例如 ） \u221e，这仅取决于使代码<strong>更易于阅读和理解</strong>的因素。<br>提示：在 Unicode 转义情况下，有时甚至在使用实际的 Unicode 字符时，解释性注释也会很有帮助。<br><strong>正例：</strong></p>
+<figure class="highlight javascript"><table><tr><td class="code"><pre><span class="line"><span class="comment">/* 最佳：即使没有评论也非常清楚。*/</span></span><br><span class="line">常量单位 = <span class="string">&#x27;μs&#x27;</span>;</span><br><span class="line"></span><br><span class="line"><span class="comment">/* 允许：但不必要，因为 μ 是可打印字符。*/</span></span><br><span class="line">常量单位 = <span class="string">&#x27;\u03bcs&#x27;</span>; <span class="comment">//&#x27;微秒&#x27;</span></span><br><span class="line"></span><br><span class="line"><span class="comment">/* 好：为清晰起见，使用带有注释的不可打印字符转义。*/</span></span><br><span class="line">返回 <span class="string">&#x27;\ufeff&#x27;</span> + 内容；<span class="comment">// 前置一个字节顺序标记。</span></span><br></pre></td></tr></table></figure>
+<p><strong>反例：</strong></p>
+<figure class="highlight javascript"><table><tr><td class="code"><pre><span class="line"><span class="comment">/* 差：读者不知道这是什么字符。*/</span> 常量单位 = <span class="string">&#x27;\u03bcs&#x27;</span>; </span><br></pre></td></tr></table></figure>
+<p>提示：永远不要仅仅因为担心某些程序可能无法正确处理非 ASCII 字符而降低代码的可读性。如果发生这种情况，这些程序就<strong>坏了</strong>，必须加以<strong>修复</strong>。</p>
+<p><a href="https://google.github.io/styleguide/jsguide.html"></a></p>
+]]></content>
+      <categories>
+        <category>前端开发</category>
+      </categories>
+      <tags>
+        <tag>FE Development</tag>
+        <tag>开发规范</tag>
+        <tag>Web</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>hexo文章自定义图片大小方法</title>
+    <url>/posts/55881/</url>
+    <content><![CDATA[<h1 id="hexo文章自定义图片大小方法"><a href="#hexo文章自定义图片大小方法" class="headerlink" title="hexo文章自定义图片大小方法"></a>hexo文章自定义图片大小方法</h1><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">&lt;div style=<span class="string">&quot;width:65%;margin:auto&quot;</span>&gt;&#123;% asset_img abc.png 图片信息描述 %&#125;&lt;/div&gt;</span><br></pre></td></tr></table></figure>]]></content>
+      <categories>
+        <category>Hexo</category>
+      </categories>
+      <tags>
+        <tag>Hexo</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>ssh连接Linux,命令行部署http-server</title>
+    <url>/posts/32506/</url>
+    <content><![CDATA[<p>今晚实践了在ssh连接Linux之后,部署http-server，下面贴出启动步骤：</p>
+<h3 id="使用账户名和密码进行ssh连接"><a href="#使用账户名和密码进行ssh连接" class="headerlink" title="使用账户名和密码进行ssh连接"></a>使用账户名和密码进行ssh连接</h3><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">ssh root@xx.xx.xxx.xxx</span><br></pre></td></tr></table></figure>
+<span id="more"></span>
+<div align=center>
+<img src="/posts/32506/server.png" class="" title="使用账户名和密码进行ssh连接">
+</div>
+
+<h3 id="安装http-server"><a href="#安装http-server" class="headerlink" title="安装http-server"></a>安装http-server</h3><p> 在自己用户权限下，新建一个空文件夹（这里是demo）执行局部安装命令</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">npm install http-server</span><br></pre></td></tr></table></figure>
+<p>此时会生成<code>package.json</code>文件，如果没有，可以用指令<code>npm init –y</code>生成</p>
+<img src="/posts/32506/server2.png" class="" title="安装http-server">
+
+<h3 id="编辑package-json-方便使用npm-stat启动服务"><a href="#编辑package-json-方便使用npm-stat启动服务" class="headerlink" title="编辑package.json(方便使用npm stat启动服务)"></a>编辑package.json(方便使用<code>npm stat</code>启动服务)</h3><p> 在自己用户权限下，新建一个空文件夹（这里是demo）执行局部安装命令</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">vi package.json</span><br></pre></td></tr></table></figure>
+<p>修改如下：（8003为自定义端口）</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">&#123;</span><br><span class="line">     <span class="string">&quot;name&quot;</span>: <span class="string">&quot;demo&quot;</span>,</span><br><span class="line">     <span class="string">&quot;version&quot;</span>: <span class="string">&quot;1.0.0&quot;</span>,</span><br><span class="line">     <span class="string">&quot;description&quot;</span>: <span class="string">&quot;&quot;</span>,</span><br><span class="line">     <span class="string">&quot;main&quot;</span>: <span class="string">&quot;index.js&quot;</span>,</span><br><span class="line">     <span class="string">&quot;dependencies&quot;</span>: &#123;</span><br><span class="line">       <span class="string">&quot;http-server&quot;</span>: <span class="string">&quot;^0.11.1&quot;</span></span><br><span class="line">     &#125;,</span><br><span class="line">     <span class="string">&quot;devDependencies&quot;</span>: &#123;&#125;,</span><br><span class="line">     <span class="string">&quot;scripts&quot;</span>: &#123;</span><br><span class="line">       <span class="string">&quot;test&quot;</span>: <span class="string">&quot;echo \&quot;Error: no test specified\&quot; &amp;&amp; exit 1&quot;</span>,</span><br><span class="line">       <span class="string">&quot;start&quot;</span>: <span class="string">&quot;http-server -p 8003&quot;</span></span><br><span class="line">     &#125;,</span><br><span class="line">     <span class="string">&quot;keywords&quot;</span>: [],</span><br><span class="line">     <span class="string">&quot;author&quot;</span>: <span class="string">&quot;&quot;</span>,</span><br><span class="line">     <span class="string">&quot;license&quot;</span>: <span class="string">&quot;ISC&quot;</span></span><br><span class="line">   &#125;</span><br></pre></td></tr></table></figure>
+<img src="/posts/32506/server3.png" class="" title="编辑package.json(方便使用&#96;npm stat&#96;启动服务)">
+
+<h3 id="使用命令启动服务"><a href="#使用命令启动服务" class="headerlink" title="使用命令启动服务"></a>使用命令启动服务</h3><figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">npm start</span><br></pre></td></tr></table></figure>
+<img src="/posts/32506/server3.png" class="" title="使用命令启动服务">
+
+<h3 id="打开浏览器，访问域名"><a href="#打开浏览器，访问域名" class="headerlink" title="打开浏览器，访问域名"></a>打开浏览器，访问域名</h3><img src="/posts/32506/server5.png" class="" title="[打开浏览器，访问域名]">
+
+<h3 id="开启后台不断开"><a href="#开启后台不断开" class="headerlink" title="开启后台不断开"></a>开启后台不断开</h3><p>开启成功后，关闭CMD亦能访问服务。</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="built_in">nohup</span> npm start &amp;</span><br></pre></td></tr></table></figure>
+<p>此时生成一个nohup.out文件，获得一个进程ID  20559</p>
+<p> ps:</p>
+<ul>
+<li>我们可以通过<code>ps -ef</code>来查看当前所有进程</li>
+<li><code>kill 20559</code>结束进程</li>
+<li>更多指令请移步Google</li>
+<li><strong>效果⬇</strong><img src="/posts/32506/server6.png" class=""></li>
+</ul>
+]]></content>
+      <categories>
+        <category>计算机</category>
+      </categories>
+      <tags>
+        <tag>Linux</tag>
+        <tag>http-server</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>uniapp组件-地址选择器（含街道）</title>
+    <url>/posts/1426/</url>
+    <content><![CDATA[<h3 id="概述"><a href="#概述" class="headerlink" title="概述"></a>概述</h3><ol>
+<li>支持uniapp（APP、H5、小程序）省市区街道三级四级联动</li>
+<li>支持默认地区或已选择地区显示</li>
+<li>数据来源可包括高德地图api、公司封装接口返回</li>
+</ol>
+<span id="more"></span>
+
+<h3 id="预览"><a href="#预览" class="headerlink" title="预览"></a>预览</h3><div style="width:350px;text-align:left;margin-left: 22px;"><img src="/posts/1426/selector.gif" class=""></div>
+
+
+<h3 id="API"><a href="#API" class="headerlink" title="API"></a>API</h3><h4 id="props"><a href="#props" class="headerlink" title="props"></a>props</h4><table>
+<thead>
+<tr>
+<th align="left">属性</th>
+<th><span style="display:inline-block;width:80px">必填</span></th>
+<th>说明</th>
+<th>类型</th>
+<th><span style="display:inline-block;width:80px">默认值</span></th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">areaInfoSelected</td>
+<td>否</td>
+<td>已选择的地址对象或默认显示地址对象，属性有：provinceObj,cityObjareaObj,streetObj</td>
+<td>Object</td>
+<td>{}</td>
+</tr>
+<tr>
+<td align="left">selectAreaLevelLimit</td>
+<td>否</td>
+<td>指定选择的级别数，如只需要选择省市区，则指定值为3</td>
+<td>Number</td>
+<td>4</td>
+</tr>
+</tbody></table>
+<h4 id="events"><a href="#events" class="headerlink" title="events"></a>events</h4><table>
+<thead>
+<tr>
+<th align="left">事件名</th>
+<th><span style="display:inline-block;">说明</span></th>
+<th>返回值</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">cancel</td>
+<td>点击取消按钮时触发</td>
+<td>-</td>
+</tr>
+<tr>
+<td align="left">confirm</td>
+<td>点击确认按钮时触发</td>
+<td>选中的省市区街道地址对象,包含如下属性：fullAreaText,provinceCode,,cityCode,areaCode,streetCode,provinceObj,<br />cityObj,areaObj,streetObj</td>
+</tr>
+</tbody></table>
+<h3 id="作者想说"><a href="#作者想说" class="headerlink" title="作者想说"></a>作者想说</h3><p>欢迎大家留言、评论与star<br>dcloud传送门：<a href="https://ext.dcloud.net.cn/plugin?id=5671">https://ext.dcloud.net.cn/plugin?id=5671</a><br>github传送门：<a href="https://github.com/LukeLiou/UniappPlugins">https://github.com/LukeLiou/UniappPlugins</a></p>
+<!-- 个人博客：https://lukeliou.github.io/ -->]]></content>
+      <categories>
+        <category>前端开发</category>
+      </categories>
+      <tags>
+        <tag>vue</tag>
+        <tag>FE Development</tag>
+        <tag>uniapp</tag>
+        <tag>组件</tag>
+        <tag>地址选择器</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>骨架屏生成gen-skeleton</title>
+    <url>/posts/36610/</url>
+    <content><![CDATA[<h3 id="简介"><a href="#简介" class="headerlink" title="简介"></a>简介</h3><p>提供三种方式（可视化界面、命令行工具、api形式) 生成网页骨架屏代码</p>
+<h3 id="安装"><a href="#安装" class="headerlink" title="安装"></a>安装</h3><figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">npm i gen-skeleton  -g --registry=http://nexus.pub.cfpamf.com/repository/npm-group/</span><br></pre></td></tr></table></figure>
+<h3 id="使用"><a href="#使用" class="headerlink" title="使用"></a>使用</h3><h4 id="方法一：可视化界面"><a href="#方法一：可视化界面" class="headerlink" title="方法一：可视化界面"></a>方法一：可视化界面</h4><figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">gen-skeleton run 5000 //谷歌会自动打开，其他浏览器需要手动</span><br></pre></td></tr></table></figure>
+<h4 id="方法二：命令行工具"><a href="#方法二：命令行工具" class="headerlink" title="方法二：命令行工具"></a>方法二：命令行工具</h4><ol>
+<li><p>生成配置文件</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">gen-skeleton init // 在当前文件夹创建skeleton.config.js</span><br></pre></td></tr></table></figure>
+</li>
+<li><p>开始编译</p>
+<figure class="highlight shell"><table><tr><td class="code"><pre><span class="line">gen-skeleton start // 开始生成骨架屏代码</span><br></pre></td></tr></table></figure></li>
+</ol>
+<h4 id="方法三：api形式"><a href="#方法三：api形式" class="headerlink" title="方法三：api形式"></a>方法三：api形式</h4><figure class="highlight javascript"><table><tr><td class="code"><pre><span class="line"><span class="keyword">const</span> <span class="title class_">GenSkeleton</span> = <span class="built_in">require</span>(<span class="string">&#x27;gen-skeleton&#x27;</span>);</span><br><span class="line"></span><br><span class="line"><span class="keyword">new</span> <span class="title class_">GenSkeleton</span>(&#123;</span><br><span class="line">  <span class="attr">isAnimation</span>: <span class="literal">true</span>,</span><br><span class="line">  <span class="attr">background</span>: <span class="string">&#x27;#ecf0f2&#x27;</span>,</span><br><span class="line">  <span class="attr">pages</span>: [</span><br><span class="line">    &#123;</span><br><span class="line">      <span class="attr">url</span>: <span class="string">&#x27;https://www.baidu.com&#x27;</span>,</span><br><span class="line">    &#125;,</span><br><span class="line">  ],</span><br><span class="line">&#125;)</span><br><span class="line">.<span class="title function_">start</span>()</span><br><span class="line">.<span class="title function_">then</span>(<span class="function"><span class="params">res</span> =&gt;</span> &#123;</span><br><span class="line">  <span class="variable language_">console</span>.<span class="title function_">log</span>(res);</span><br><span class="line">&#125;);</span><br></pre></td></tr></table></figure>
+
+<h3 id="配置说明"><a href="#配置说明" class="headerlink" title="配置说明"></a>配置说明</h3><h4 id="skeleton-config-js"><a href="#skeleton-config-js" class="headerlink" title="skeleton.config.js"></a>skeleton.config.js</h4><table>
+<thead>
+<tr>
+<th>参数</th>
+<th>说明</th>
+<th>参数类型</th>
+<th>是否必填</th>
+<th>默认值</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>isAnimation</td>
+<td>是否开启动画</td>
+<td>Boolean</td>
+<td>否</td>
+<td>true</td>
+</tr>
+<tr>
+<td>background</td>
+<td>骨架屏主题色</td>
+<td>Color</td>
+<td>否</td>
+<td>#ecf0f2</td>
+</tr>
+<tr>
+<td>outputFilePath</td>
+<td>公共输出路径</td>
+<td>String</td>
+<td>否</td>
+<td>无</td>
+</tr>
+<tr>
+<td>device</td>
+<td>设备类型</td>
+<td>String</td>
+<td>是</td>
+<td>mobile</td>
+</tr>
+<tr>
+<td>init</td>
+<td>生成骨架屏之前函数处理</td>
+<td>Fuc</td>
+<td>否</td>
+<td>Fuc</td>
+</tr>
+<tr>
+<td>custom</td>
+<td>自定义骨架屏</td>
+<td>Fuc</td>
+<td>否</td>
+<td>Fuc</td>
+</tr>
+<tr>
+<td>pages</td>
+<td>生成骨架屏页面的配置</td>
+<td>Array</td>
+<td>是</td>
+<td>无</td>
+</tr>
+<tr>
+<td>allowBgWithoutBorder</td>
+<td>是否允许没有边框的背景生成骨架</td>
+<td>Boolean</td>
+<td>否</td>
+<td>false</td>
+</tr>
+<tr>
+<td>delay</td>
+<td>延时时间（等待页面）ms</td>
+<td>Number</td>
+<td>否</td>
+<td>1000</td>
+</tr>
+</tbody></table>
+<p>pages 参数说明</p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>说明</th>
+<th>数据类型</th>
+<th>是否必填</th>
+<th>默认值</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>url</td>
+<td>网页地址</td>
+<td>String</td>
+<td>是</td>
+<td>无</td>
+</tr>
+<tr>
+<td>outputFileName</td>
+<td>输出的 html 名称</td>
+<td>String</td>
+<td>否</td>
+<td>无</td>
+</tr>
+<tr>
+<td>outputFilePath</td>
+<td>输出的路径地址</td>
+<td>String</td>
+<td>否</td>
+<td>无</td>
+</tr>
+</tbody></table>
+<p><strong>skeleton.config.js配置示例：</strong></p>
+<figure class="highlight javascript"><table><tr><td class="code"><pre><span class="line"><span class="keyword">const</span> config = &#123;</span><br><span class="line">  <span class="attr">isAnimation</span>: <span class="literal">true</span>, <span class="comment">// 是否使用动画</span></span><br><span class="line">  <span class="attr">background</span>: <span class="string">&#x27;#ecf0f2&#x27;</span>, <span class="comment">// 骨架屏主题色</span></span><br><span class="line">  <span class="attr">outputFilePath</span>: <span class="string">&#x27;./shell&#x27;</span>, <span class="comment">// 输出路径，pages元素没有配置则使用这个</span></span><br><span class="line">  <span class="attr">delay</span>:<span class="number">1000</span>,</span><br><span class="line">  <span class="attr">allowBgWithoutBorder</span>:<span class="literal">false</span>,</span><br><span class="line">  <span class="attr">init</span>: <span class="function">() =&gt;</span> &#123;&#125;, <span class="comment">//开始生成之前的操作</span></span><br><span class="line">  <span class="comment">// 私人订制</span></span><br><span class="line">  <span class="attr">custom</span>: <span class="function">(<span class="params">node, draw</span>) =&gt;</span> &#123;</span><br><span class="line">    <span class="comment">// if (node.tagName.toLowerCase() === &#x27;img&#x27;) &#123;</span></span><br><span class="line">    <span class="comment">// draw(&#123;</span></span><br><span class="line">    <span class="comment">//   width: 100,</span></span><br><span class="line">    <span class="comment">//   height: 8,</span></span><br><span class="line">    <span class="comment">//   left: 0,</span></span><br><span class="line">    <span class="comment">//   top: 0,</span></span><br><span class="line">    <span class="comment">//   zIndex: 99999999,</span></span><br><span class="line">    <span class="comment">//   background: &#x27;#ecf0f2&#x27;,</span></span><br><span class="line">    <span class="comment">// &#125;);</span></span><br><span class="line">    <span class="comment">// return false;</span></span><br><span class="line">    <span class="comment">// &#125;</span></span><br><span class="line">  &#125;,</span><br><span class="line">  <span class="comment">// 需要生成骨架屏的网页</span></span><br><span class="line">  <span class="attr">pages</span>: [</span><br><span class="line">    &#123;</span><br><span class="line">      <span class="attr">url</span>: <span class="string">&#x27;https://www.baidu.com&#x27;</span>, <span class="comment">// 网页链接</span></span><br><span class="line">      <span class="comment">// outputFilePath: &#x27;./shell&#x27;, // 输出路径</span></span><br><span class="line">      <span class="attr">outputFileName</span>: <span class="string">&#x27;baidu&#x27;</span>, <span class="comment">// 输出html名称</span></span><br><span class="line">    &#125;,</span><br><span class="line">  ],</span><br><span class="line">&#125;</span><br><span class="line"><span class="variable language_">module</span>.<span class="property">exports</span> = config;</span><br></pre></td></tr></table></figure>
+<h4 id="其他"><a href="#其他" class="headerlink" title="其他"></a>其他</h4><p>如果想忽略某些具有背景色的元素，不生成色块，可添加class&#x3D;’not-skeleton-block’</p>
+<figure class="highlight html"><table><tr><td class="code"><pre><span class="line"><span class="tag">&lt;<span class="name">button-tab</span> <span class="attr">class</span>=<span class="string">&quot;not-skeleton-block&quot;</span> <span class="attr">v-model</span>=<span class="string">&quot;tabIndex&quot;</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">button-tab-item</span> <span class="attr">selected</span>&gt;</span></span><br><span class="line">      产品介绍</span><br><span class="line">    <span class="tag">&lt;/<span class="name">button-tab-item</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">button-tab-item</span>&gt;</span>常见问题<span class="tag">&lt;/<span class="name">button-tab-item</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">button-tab-item</span>&gt;</span>保险条款<span class="tag">&lt;/<span class="name">button-tab-item</span>&gt;</span></span><br><span class="line">  <span class="tag">&lt;/<span class="name">button-tab</span>&gt;</span></span><br></pre></td></tr></table></figure>
+]]></content>
+      <categories>
+        <category>前端开发</category>
+      </categories>
+      <tags>
+        <tag>vue</tag>
+        <tag>移动端</tag>
+        <tag>骨架屏</tag>
+        <tag>FE Development</tag>
+      </tags>
+  </entry>
+</search>
